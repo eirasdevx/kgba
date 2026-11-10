@@ -3,7 +3,6 @@ package com.kgba.app
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.Manifest
-import android.app.AlertDialog
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
@@ -40,7 +39,6 @@ import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
-import android.widget.BaseAdapter
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -225,8 +223,11 @@ class EmulatorActivity : Activity(), SensorEventListener {
 
     // ---------------------------------------------------------------- diálogos (pausan el juego)
 
-    private fun show(b: AlertDialog.Builder, onDismiss: (() -> Unit)? = null): AlertDialog {
+    private fun show(b: AppDialog.Builder, onDismiss: (() -> Unit)? = null): AppDialog {
         dialogs++
+        pad.releaseInputs()
+        keyButtons = 0; axisButtons = 0; updateHw()
+        emu?.rewinding = false
         emu?.pauseEmu()
         b.setOnDismissListener {
             onDismiss?.invoke()
@@ -291,7 +292,7 @@ class EmulatorActivity : Activity(), SensorEventListener {
         if (hasTilt) items += getString(R.string.recalibrate) to { tiltBaseX = Float.NaN }
         group("Conexiones y sensores")
         items += getString(R.string.reset) to {
-            show(AlertDialog.Builder(this).setTitle(R.string.reset)
+            show(AppDialog.Builder(this).setTitle(R.string.reset)
                 .setMessage("Se perderá el progreso que no hayas guardado. ¿Reiniciar el juego?")
                 .setNegativeButton(R.string.cancel, null)
                 .setPositiveButton(R.string.reset) { _, _ -> e.reset() })
@@ -305,12 +306,8 @@ class EmulatorActivity : Activity(), SensorEventListener {
 
     private fun showPausePanel(title: String, groups: Map<String, List<Pair<String, () -> Unit>>>) {
         val ui = AppUi(this)
-        val body = ui.column(20)
-        body.addView(ui.text("JUEGO EN PAUSA", 12, true, AppUi.ACCENT))
-        body.addView(ui.text(title, 20, true))
-        val scroll = android.widget.ScrollView(this)
-        scroll.addView(body)
-        lateinit var dialog: AlertDialog
+        val body = ui.column()
+        lateinit var dialog: AppDialog
         val descriptions = mapOf(
             "Velocidad y rebobinado" to ("Avance rápido y retroceso" to "»"),
             "Imagen y sonido" to ("Filtros, colores, capturas y audio" to "▣"),
@@ -340,13 +337,13 @@ class EmulatorActivity : Activity(), SensorEventListener {
                 dialog.dismiss()
             })
         }
-        dialog = show(AlertDialog.Builder(this).setView(scroll))
-        dialog.window?.setBackgroundDrawable(ui.background(AppUi.BG))
+        dialog = show(AppDialog.Builder(this).setTitle(title).setView(body)
+            .setNegativeButton("Volver al juego", null))
     }
 
     private fun showPauseCategory(title: String, actions: List<Pair<String, () -> Unit>>) {
         var backToMenu = false
-        show(AlertDialog.Builder(this).setTitle(title)
+        show(AppDialog.Builder(this).setTitle(title)
             .setItems(actions.map { it.first }.toTypedArray()) { _, which -> actions[which].second() }
             .setNegativeButton("Volver al menú") { _, _ -> backToMenu = true }) {
                 if (backToMenu) window.decorView.post { showMenu() }
@@ -360,7 +357,7 @@ class EmulatorActivity : Activity(), SensorEventListener {
 
     private fun filterDialog() {
         val e = emu ?: return
-        show(AlertDialog.Builder(this).setSingleChoiceItems(filterNames(), e.filter) { d, which ->
+        show(AppDialog.Builder(this).setTitle("Filtro de imagen").setSingleChoiceItems(filterNames(), e.filter) { d, which ->
             e.filter = which; prefs.edit().putInt("filter", which).apply(); d.dismiss()
         })
     }
@@ -369,7 +366,7 @@ class EmulatorActivity : Activity(), SensorEventListener {
         val e = emu ?: return
         val values = intArrayOf(2, 3, 4, 6, 0)
         val names = values.map { if (it == 0) getString(R.string.unlimited) else "×$it" }.toTypedArray()
-        show(AlertDialog.Builder(this).setSingleChoiceItems(names, values.indexOf(e.ffSpeed)) { d, which ->
+        show(AppDialog.Builder(this).setTitle("Velocidad de avance rápido").setSingleChoiceItems(names, values.indexOf(e.ffSpeed)) { d, which ->
             e.ffSpeed = values[which]; prefs.edit().putInt("ffspeed", values[which]).apply(); d.dismiss()
         })
     }
@@ -377,7 +374,7 @@ class EmulatorActivity : Activity(), SensorEventListener {
     private fun opacityDialog() {
         val values = intArrayOf(20, 40, 60, 80, 100)
         val names = values.map { "$it %" }.toTypedArray()
-        show(AlertDialog.Builder(this).setSingleChoiceItems(names, values.indexOf(prefs.getInt("alpha", 60))) { d, which ->
+        show(AppDialog.Builder(this).setTitle("Opacidad de los controles").setSingleChoiceItems(names, values.indexOf(prefs.getInt("alpha", 60))) { d, which ->
             prefs.edit().putInt("alpha", values[which]).apply()
             pad.landscapeAlpha = values[which] / 100f
             d.dismiss()
@@ -425,59 +422,79 @@ class EmulatorActivity : Activity(), SensorEventListener {
 
     private fun slotDialog(mode: SlotMode) {
         if (emu == null) return
-        val dp = resources.displayMetrics.density
+        val ui = AppUi(this)
         val fmt = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
-        val adapter = object : BaseAdapter() {
-            override fun getCount() = RomStore.SLOTS
-            override fun getItem(p: Int) = p + 1
-            override fun getItemId(p: Int) = p.toLong()
-            override fun getView(p: Int, convert: View?, parent: ViewGroup): View {
-                val n = p + 1
-                val row = LinearLayout(this@EmulatorActivity).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                    setPadding((16 * dp).toInt(), (6 * dp).toInt(), (16 * dp).toInt(), (6 * dp).toInt())
-                }
-                val img = ImageView(this@EmulatorActivity).apply {
-                    scaleType = ImageView.ScaleType.FIT_CENTER
-                    setBackgroundColor(0xFF000000.toInt())
-                }
-                val thumb = RomStore.thumbFile(this@EmulatorActivity, romId, n)
-                val state = RomStore.stateFile(this@EmulatorActivity, romId, n)
-                if (state.isFile && thumb.isFile) BitmapFactory.decodeFile(thumb.path)?.let {
-                    img.setImageBitmap(it)
-                    // sin suavizado: píxeles nítidos
-                    img.drawable?.isFilterBitmap = false
-                }
-                row.addView(img, LinearLayout.LayoutParams((96 * dp).toInt(), (64 * dp).toInt()))
-                val text = TextView(this@EmulatorActivity).apply {
-                    setPadding((14 * dp).toInt(), 0, 0, 0)
-                    textSize = 15f
-                    setTextColor(0xFFFFFFFF.toInt())
-                    val title = getString(R.string.slot_name, n) + if (n == slot) "  ●" else ""
-                    val sub = if (state.isFile) fmt.format(Date(state.lastModified())) else getString(R.string.slot_empty)
-                    text = "$title\n$sub"
-                }
-                row.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
-                return row
+        val body = ui.column()
+        body.addView(ui.text(when (mode) {
+            SlotMode.SAVE -> "Elige dónde guardar tu progreso."
+            SlotMode.LOAD -> "Continúa desde una partida guardada."
+            SlotMode.PICK -> "Elige la ranura para guardar y cargar rápidamente."
+        }, 14, color = AppUi.MUTED).apply { setPadding(0, 0, 0, ui.dp(16)) })
+        lateinit var dialog: AppDialog
+        for (n in 1..RomStore.SLOTS) {
+            val state = RomStore.stateFile(this, romId, n)
+            val thumb = RomStore.thumbFile(this, romId, n)
+            val occupied = state.isFile
+            val selected = n == slot
+            val enabled = mode != SlotMode.LOAD || occupied
+            val row = ui.line().apply {
+                setPadding(ui.dp(12), ui.dp(12), ui.dp(12), ui.dp(12))
+                minimumHeight = ui.dp(88)
+                background = ui.ripple(ui.shape(if (selected) AppUi.SURFACE_HIGH else AppUi.PANEL,
+                    18, if (selected) AppUi.PRIMARY else AppUi.BORDER))
+                layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = ui.dp(10) }
+                isSelected = selected
+                isEnabled = enabled
+                isFocusable = enabled
+                alpha = if (enabled) 1f else 0.55f
             }
+            val preview = FrameLayout(this).apply {
+                background = ui.shape(AppUi.SURFACE_LOWEST, 10, AppUi.BORDER)
+                clipToOutline = true
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            }
+            val bitmap = if (occupied && thumb.isFile) BitmapFactory.decodeFile(thumb.path) else null
+            if (bitmap != null) preview.addView(ImageView(this).apply {
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setImageBitmap(bitmap)
+                drawable?.isFilterBitmap = false
+            }, FrameLayout.LayoutParams(-1, -1))
+            else preview.addView(ui.icon(if (occupied) R.drawable.ic_nav_saves else R.drawable.ic_add,
+                AppUi.OUTLINE, 24), FrameLayout.LayoutParams(ui.dp(24), ui.dp(24), Gravity.CENTER))
+            row.addView(preview, LinearLayout.LayoutParams(ui.dp(84), ui.dp(56)))
+            val labels = ui.column().apply {
+                addView(ui.text(getString(R.string.slot_name, n), 16, true))
+                if (selected) addView(ui.text("ACTUAL", 10, true, AppUi.PRIMARY))
+                addView(ui.text(if (occupied) fmt.format(Date(state.lastModified())) else getString(R.string.slot_empty),
+                    12, color = AppUi.MUTED))
+            }
+            row.addView(labels, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = ui.dp(14) })
+            row.contentDescription = "${getString(R.string.slot_name, n)}, ${if (occupied) fmt.format(Date(state.lastModified())) else getString(R.string.slot_empty)}" +
+                if (selected) ", ranura actual" else ""
+            if (enabled) row.setOnClickListener {
+                fun perform() {
+                    setSlot(n)
+                    when (mode) {
+                        SlotMode.SAVE -> saveSlot(n)
+                        SlotMode.LOAD -> loadSlot(n)
+                        SlotMode.PICK -> {}
+                    }
+                }
+                if (mode == SlotMode.SAVE && occupied) {
+                    show(AppDialog.Builder(this).setTitle("¿Sobrescribir la ranura $n?")
+                        .setMessage("Se reemplazará el estado guardado en esta ranura.")
+                        .setNegativeButton("Cancelar", null)
+                        .setPositiveButton("Sobrescribir") { _, _ -> perform(); dialog.dismiss() })
+                } else { perform(); dialog.dismiss() }
+            }
+            body.addView(row)
         }
         val title = when (mode) {
             SlotMode.SAVE -> R.string.slot_title_save
             SlotMode.LOAD -> R.string.slot_title_load
             SlotMode.PICK -> R.string.slot_title_pick
         }
-        show(AlertDialog.Builder(this)
-            .setTitle(title)
-            .setAdapter(adapter) { _, which ->
-                val n = which + 1
-                setSlot(n)
-                when (mode) {
-                    SlotMode.SAVE -> saveSlot(n)
-                    SlotMode.LOAD -> loadSlot(n)
-                    SlotMode.PICK -> {}
-                }
-            }
+        dialog = show(AppDialog.Builder(this).setTitle(title).setView(body)
             .setNegativeButton(R.string.cancel, null))
     }
 
@@ -495,7 +512,7 @@ class EmulatorActivity : Activity(), SensorEventListener {
         items += getString(R.string.link_host_bt) to { withBluetooth { hostBluetooth(it) } }
         items += getString(R.string.link_join_bt) to { withBluetooth { joinBluetooth(it) } }
         if (link?.connected == true) items += getString(R.string.link_disconnect) to { disconnectLink() }
-        show(AlertDialog.Builder(this)
+        show(AppDialog.Builder(this)
             .setTitle(R.string.link_title)
             .setItems(items.map { it.first }.toTypedArray()) { _, w -> items[w].second() })
     }
@@ -507,7 +524,7 @@ class EmulatorActivity : Activity(), SensorEventListener {
     /** Espera una conexión en segundo plano con un diálogo que se puede cancelar. */
     private fun waitFor(message: String, work: (LinkNet.Waiter) -> LinkConnection) {
         val w = LinkNet.Waiter()
-        val dlg = show(AlertDialog.Builder(this)
+        val dlg = show(AppDialog.Builder(this)
             .setTitle(R.string.link_title)
             .setMessage(message)
             .setNegativeButton(R.string.cancel) { _, _ -> w.cancel() }
@@ -564,7 +581,7 @@ class EmulatorActivity : Activity(), SensorEventListener {
         val w = LinkNet.Waiter()
         val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
         val lock = wifi?.createMulticastLock("KGBA")?.apply { setReferenceCounted(false); acquire() }
-        show(AlertDialog.Builder(this)
+        show(AppDialog.Builder(this)
             .setTitle(R.string.link_searching)
             .setAdapter(adapter) { _, which -> w.cancel(); connectTcp(found[which].address) }
             .setNeutralButton(R.string.link_manual_ip) { _, _ -> w.cancel(); manualIp() }
@@ -591,7 +608,7 @@ class EmulatorActivity : Activity(), SensorEventListener {
             hint = "192.168.1.20"
             setText(prefs.getString("last_ip", ""))
         }
-        show(AlertDialog.Builder(this)
+        show(AppDialog.Builder(this)
             .setTitle(R.string.link_manual_ip)
             .setView(edit)
             .setPositiveButton(android.R.string.ok) { _, _ ->
@@ -648,7 +665,7 @@ class EmulatorActivity : Activity(), SensorEventListener {
         val devices: List<BluetoothDevice> = try { adapter.bondedDevices.toList() } catch (_: SecurityException) { emptyList() }
         if (devices.isEmpty()) { toast(getString(R.string.link_no_paired), true); return }
         val names = devices.map { d -> (try { d.name } catch (_: SecurityException) { null }) ?: d.address }
-        show(AlertDialog.Builder(this)
+        show(AppDialog.Builder(this)
             .setTitle(R.string.link_pick_device)
             .setItems(names.toTypedArray()) { _, which ->
                 val d = devices[which]
@@ -762,7 +779,7 @@ class EmulatorActivity : Activity(), SensorEventListener {
 
     private fun solarDialog() {
         val names = arrayOf(getString(R.string.solar_auto)) + (0..10).map { getString(R.string.solar_level, it) }
-        show(AlertDialog.Builder(this).setSingleChoiceItems(names, prefs.getInt("solar", -1) + 1) { d, which ->
+        show(AppDialog.Builder(this).setTitle("Sensor solar").setSingleChoiceItems(names, prefs.getInt("solar", -1) + 1) { d, which ->
             prefs.edit().putInt("solar", which - 1).apply()
             updateSolar(); registerSensors()
             d.dismiss()
@@ -782,12 +799,12 @@ class EmulatorActivity : Activity(), SensorEventListener {
     private fun remapDialog() {
         val names = Keymap.ACTIONS.map { (a, n) -> "$n:  ${keymap.describe(a)}" }.toMutableList()
         names += getString(R.string.remap_reset)
-        show(AlertDialog.Builder(this)
+        show(AppDialog.Builder(this)
             .setTitle(R.string.remap_title)
             .setItems(names.toTypedArray()) { _, which ->
                 if (which == Keymap.ACTIONS.size) { keymap.reset(); remapDialog(); return@setItems }
                 val (action, name) = Keymap.ACTIONS[which]
-                val d = AlertDialog.Builder(this)
+                val d = AppDialog.Builder(this)
                     .setMessage(getString(R.string.remap_press, name))
                     .setNegativeButton(R.string.cancel, null)
                 d.setOnKeyListener { dlg, code, ev ->

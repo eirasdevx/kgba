@@ -34,6 +34,27 @@ class ConsoleUiChecks : Instrumentation() {
         sendStatus(1, status)
         try {
             runOnMainSync {
+                // Long filter labels remain readable on narrow screens and with large fonts.
+                for (font in listOf(1f, 1.6f, 2f)) for (widthDp in listOf(280, 360, 600)) {
+                    val config = android.content.res.Configuration(targetContext.resources.configuration).apply { fontScale = font }
+                    val context = targetContext.createConfigurationContext(config)
+                    val ui = AppUi(context)
+                    val choices = ui.options(listOf("Nítido", "Suavizado", "Líneas de barrido", "Rejilla LCD"), 2) {} as ViewGroup
+                    choices.measure(View.MeasureSpec.makeMeasureSpec(ui.dp(widthDp), View.MeasureSpec.EXACTLY),
+                        View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+                    choices.layout(0, 0, choices.measuredWidth, choices.measuredHeight)
+                    val rectangles = mutableListOf<Rect>()
+                    for (i in 0 until choices.childCount) {
+                        val cell = choices.getChildAt(i) as TextView
+                        check(cell.height >= ui.dp(48))
+                        val rect = Rect(cell.left, cell.top, cell.right, cell.bottom)
+                        check(Rect(0, 0, choices.width, choices.height).contains(rect))
+                        check(rectangles.none { Rect.intersects(it, rect) }) { "Filter choices overlap" }
+                        rectangles += rect
+                        check(cell.layout.getLineEnd(cell.lineCount - 1) == cell.text.length) { "Filter label clipped" }
+                        check((0 until cell.lineCount).all { cell.layout.getEllipsisCount(it) == 0 })
+                    }
+                }
                 val pad = GamepadView(targetContext)
                 pad.consoleStyle = ConsoleStyle()
                 fun layout(w: Int, h: Int) {
@@ -141,10 +162,28 @@ class ConsoleUiChecks : Instrumentation() {
                 return null
             }
             runOnMainSync {
-                checkNotNull(find(home.window.decorView, "AJUSTES")).performClick()
+                val settings = checkNotNull(find(home.window.decorView, "Ajustes"))
+                (settings.parent as View).performClick()
                 checkNotNull(find(home.window.decorView, "Personalizar consola"))
             }
             screenshot("settings.png")
+            lateinit var sample: AppDialog
+            runOnMainSync {
+                sample = AppDialog.Builder(home).setTitle("Consola")
+                    .setItems(arrayOf("Reiniciar", "Salir")) { _, _ -> }
+                    .setNegativeButton("Volver al menú", null).show()
+            }
+            screenshot("custom-console-panel.png")
+            runOnMainSync {
+                val decor = sample.window!!.decorView
+                val title = checkNotNull(find(decor, "Consola"))
+                val footer = checkNotNull(find(decor, "Volver al menú"))
+                val titleBounds = Rect(); val footerBounds = Rect()
+                check(title.getGlobalVisibleRect(titleBounds))
+                check(footer.getGlobalVisibleRect(footerBounds))
+                check(titleBounds.bottom < footerBounds.top)
+                sample.dismiss()
+            }
             runOnMainSync { home.finish() }
             val activity = startActivitySync(Intent(targetContext, ConsoleEditorActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -195,6 +234,10 @@ class ConsoleUiChecks : Instrumentation() {
                 bytes[offset] = color.toByte(); bytes[offset + 1] = (color shr 8).toByte()
             }
             rom.writeBytes(bytes)
+            val gameId = RomStore.read(targetContext, Uri.fromFile(rom)).id
+            // Only the generated fixture's state is reset, making this check repeatable.
+            RomStore.stateFile(targetContext, gameId, 10).delete()
+            RomStore.thumbFile(targetContext, gameId, 10).delete()
             val game = startActivitySync(Intent(targetContext, EmulatorActivity::class.java)
                 .setData(Uri.fromFile(rom)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             Thread.sleep(3000)
@@ -231,9 +274,73 @@ class ConsoleUiChecks : Instrumentation() {
                 }
                 image.recycle()
             }
+            fun clickPanel(label: String) {
+                waitForIdleSync()
+                fun findNode(node: android.view.accessibility.AccessibilityNodeInfo): android.view.accessibility.AccessibilityNodeInfo? {
+                    if (node.text?.toString() == label) return node
+                    for (i in 0 until node.childCount) node.getChild(i)?.let { findNode(it)?.let { match -> return match } }
+                    return null
+                }
+                fun scrollNode(node: android.view.accessibility.AccessibilityNodeInfo): android.view.accessibility.AccessibilityNodeInfo? {
+                    if (node.isScrollable) return node
+                    for (i in 0 until node.childCount) node.getChild(i)?.let { scrollNode(it)?.let { match -> return match } }
+                    return null
+                }
+                var match = findNode(checkNotNull(uiAutomation.rootInActiveWindow))
+                var attempts = 0
+                while (match == null && attempts++ < 12) {
+                    val scroll = scrollNode(checkNotNull(uiAutomation.rootInActiveWindow)) ?: break
+                    if (!scroll.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)) break
+                    Thread.sleep(200)
+                    match = findNode(checkNotNull(uiAutomation.rootInActiveWindow))
+                }
+                var node = checkNotNull(match) { "Missing panel action: $label" }
+                while (!node.isClickable) node = checkNotNull(node.parent)
+                check(node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
+                waitForIdleSync()
+            }
+            fun gameAction(action: Int) {
+                runOnMainSync {
+                    fun pad(view: View): GamepadView? {
+                        if (view is GamepadView) return view
+                        if (view is ViewGroup) for (i in 0 until view.childCount) pad(view.getChildAt(i))?.let { return it }
+                        return null
+                    }
+                    checkNotNull(pad(game.window.decorView)).onAction(action)
+                }
+                waitForIdleSync()
+            }
+            gameAction(GamepadView.ACT_MENU)
+            screenshot("pause-panel.png")
+            clickPanel("Consola")
+            screenshot("console-panel.png")
+            clickPanel("Volver al menú")
+            Thread.sleep(300)
+            clickPanel(targetContext.getString(R.string.save_state))
+            screenshot("save-slots.png")
+            // The last slot must be reachable; saving it should update the active slot.
+            clickPanel(targetContext.getString(R.string.slot_name, 10))
+            Thread.sleep(500)
+            check(RomStore.stateFile(targetContext, gameId, 10).isFile) { "Custom slot panel did not save slot 10" }
+            check(targetContext.getSharedPreferences("kgba", 0).getInt("slot_$gameId", 0) == 10)
+            gameAction(GamepadView.ACT_MENU)
+            clickPanel(targetContext.getString(R.string.load_state))
+            screenshot("load-slots.png")
+            clickPanel(targetContext.getString(R.string.slot_name, 10))
+            Thread.sleep(500)
+            gameAction(GamepadView.ACT_MENU)
+            clickPanel(targetContext.getString(R.string.save_state))
+            clickPanel(targetContext.getString(R.string.slot_name, 10))
+            screenshot("overwrite-panel.png")
+            clickPanel("Cancelar")
+            runOnMainSync { game.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+            screenshot("save-slots-landscape.png")
+            clickPanel("Cancelar")
+            gameAction(GamepadView.ACT_MENU)
+            clickPanel("Volver al juego")
             runOnMainSync { game.finish() }
             rom.delete()
-            result.putString("stream", "Console UI checks passed: full image, aspect ratio, real game rotation, drag, resize, touch, cancel, persistence, reset and editor.\n")
+            result.putString("stream", "Console UI checks passed: responsive filters, custom panels, slots, save/load, overwrite cancellation, rotation, full image, drag, resize, input, persistence and editor.\n")
             sendStatus(0, status)
             finish(Activity.RESULT_OK, result)
         } catch (error: Throwable) {

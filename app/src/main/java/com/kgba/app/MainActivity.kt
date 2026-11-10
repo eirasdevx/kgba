@@ -153,8 +153,7 @@ class MainActivity : Activity() {
     }
 
     /** Diálogos con el tema claro u oscuro activo. */
-    private fun dialog() = android.app.AlertDialog.Builder(this,
-        if (AppUi.dark) android.R.style.Theme_Material_Dialog_Alert else android.R.style.Theme_Material_Light_Dialog_Alert)
+    private fun dialog() = AppDialog.Builder(this)
 
     /** Al cambiar el modo oscuro del sistema con el tema «Sistema», se repinta. */
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
@@ -189,6 +188,7 @@ class MainActivity : Activity() {
             val cell = ui.column().apply {
                 gravity = Gravity.CENTER_HORIZONTAL
                 isFocusable = true
+                isSelected = on
                 contentDescription = label
                 background = ui.ripple(ui.shape(0, 16))
                 setOnClickListener { action() }
@@ -226,15 +226,7 @@ class MainActivity : Activity() {
         if (recent.isEmpty()) { content.addView(emptyLibrary()); return }
         if (filter == "all" && query.isEmpty()) {
             val first = recent.first()
-            val id = RomStore.idFor(this, first.first)
-            val head = ui.line().apply { setPadding(ui.dp(2), ui.dp(24), ui.dp(2), ui.dp(10)) }
-            head.addView(ui.icon(R.drawable.ic_history, AppUi.MUTED, 20).apply {
-                (layoutParams as LinearLayout.LayoutParams).marginEnd = ui.dp(8)
-            })
-            head.addView(ui.mono("Última partida", 12, AppUi.MUTED, true), LinearLayout.LayoutParams(0, -2, 1f))
-            if (id != null) head.addView(ui.mono("Ranura #%02d activa".format(prefs.getInt("slot_$id", 1)), 10, AppUi.TERTIARY))
-            content.addView(head)
-            content.addView(heroCard(first, id))
+            content.addView(continueCard(first, RomStore.idFor(this, first.first)))
         }
         val head = ui.line().apply { setPadding(ui.dp(2), ui.dp(28), ui.dp(2), ui.dp(4)) }
         val asList = prefs.getBoolean("view_list", true)
@@ -360,48 +352,39 @@ class MainActivity : Activity() {
         CoverStore.request(this, game.first, game.second) { if (!isFinishing && page == LIBRARY) render(true) }
     }
 
-    /** Tarjeta grande de la última partida, con aspecto de cartucho insertado. */
-    private fun heroCard(game: Pair<String, String>, id: String?): View {
-        val outer = ui.column(10).apply { background = ui.shape(AppUi.SURFACE_LOW, 28, 0x337C3AED) }
-        val cart = ui.column().apply {
-            background = ui.shape(AppUi.SURFACE_HIGH, 22, AppUi.BORDER)
-            clipToOutline = true
+    /** Franja compacta para retomar la última partida: carátula pequeña, título y botón de jugar. */
+    private fun continueCard(game: Pair<String, String>, id: String?): View {
+        val card = ui.line().apply {
+            setPadding(ui.dp(10), ui.dp(10), ui.dp(10), ui.dp(10))
+            background = ui.ripple(ui.shape(AppUi.SURFACE_LOW, 20, 0x557C3AED))
+            isFocusable = true
+            contentDescription = "Seguir jugando a ${name(game)}"
+            setOnClickListener { launch(Uri.parse(game.first)) }
+            setOnLongClickListener { gameOptions(game); true }
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(20) }
         }
-        cart.addView(ui.mono("KGBA · Cartucho", 10, AppUi.OUTLINE).apply {
-            gravity = Gravity.CENTER; setPadding(0, ui.dp(8), 0, ui.dp(8))
-        })
-        val art = FrameLayout(this)
         val cover = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            setBackgroundColor(AppUi.SURFACE_LOWEST)
+            background = ui.shape(AppUi.SURFACE_LOWEST, 12, AppUi.BORDER)
+            clipToOutline = true
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
-        coverInto(cover, game, ui.dp(48))
-        art.addView(cover, FrameLayout.LayoutParams(-1, ui.dp(190)))
-        art.addView(ui.tag(RomStore.cartCode(id), AppUi.OVERLAY_CYAN, AppUi.OVERLAY_BG),
-            FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply { setMargins(ui.dp(10), ui.dp(10), 0, 0) })
-        if (isFavorite(game.first)) art.addView(ui.tag("★ Favorito", AppUi.OVERLAY_VIOLET, AppUi.OVERLAY_BG),
-            FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { setMargins(0, ui.dp(10), ui.dp(10), 0) })
-        cart.addView(art, LinearLayout.LayoutParams(-1, ui.dp(190)).apply {
-            leftMargin = ui.dp(8); rightMargin = ui.dp(8)
+        coverInto(cover, game, ui.dp(14))
+        card.addView(cover, LinearLayout.LayoutParams(ui.dp(56), ui.dp(56)).apply { marginEnd = ui.dp(14) })
+        val labels = ui.column()
+        labels.addView(ui.mono("Seguir jugando", 10, AppUi.PRIMARY, true))
+        labels.addView(ui.text(name(game), 16, true).apply {
+            maxLines = 1; ellipsize = TextUtils.TruncateAt.END; setPadding(0, ui.dp(2), 0, ui.dp(2))
         })
-        val info = ui.column().apply { setPadding(ui.dp(16), ui.dp(14), ui.dp(16), ui.dp(16)) }
-        val titleRow = ui.line()
-        titleRow.addView(ui.headline(name(game), 22).apply {
+        val slot = if (id != null) " · Ranura #%02d".format(prefs.getInt("slot_$id", 1)) else ""
+        labels.addView(ui.mono(playedLabel(game.first) + slot, 10, AppUi.MUTED).apply {
             maxLines = 1; ellipsize = TextUtils.TruncateAt.END
-        }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = ui.dp(8) })
-        val states = RomStore.stateCount(this, id)
-        titleRow.addView(ui.tag(if (states > 0) "$states ranuras" else "Auto-save"))
-        info.addView(titleRow)
-        info.addView(ui.mono(playedLabel(game.first), 10, AppUi.TERTIARY).apply { setPadding(0, ui.dp(8), 0, ui.dp(16)) })
-        val actions = ui.line()
-        actions.addView(ui.pill("Jugar ahora", R.drawable.ic_play) { launch(Uri.parse(game.first)) },
-            LinearLayout.LayoutParams(0, ui.dp(52), 1f).apply { marginEnd = ui.dp(10) })
-        actions.addView(ui.iconButton(R.drawable.ic_nav_saves, "Guardados", AppUi.MUTED, AppUi.SURFACE_HIGHEST, 52) { go(SAVES) })
-        info.addView(actions)
-        cart.addView(info)
-        outer.addView(cart)
-        return outer
+        })
+        card.addView(labels, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = ui.dp(8) })
+        card.addView(ui.iconButton(R.drawable.ic_play, "Jugar ahora", AppUi.ON_PRIMARY_CONTAINER, AppUi.PRIMARY_CONTAINER, 48) {
+            launch(Uri.parse(game.first))
+        })
+        return card
     }
 
     private fun visibleGames(): List<Pair<String, String>> {
@@ -758,27 +741,7 @@ class MainActivity : Activity() {
         if (parent.childCount > 0) parent.addView(divider())
         val box = ui.column().apply { setPadding(ui.dp(14), ui.dp(12), ui.dp(14), ui.dp(14)) }
         box.addView(ui.text(title, 16, true).apply { setPadding(0, 0, 0, ui.dp(10)) })
-        val track = ui.line().apply {
-            setPadding(ui.dp(4), ui.dp(4), ui.dp(4), ui.dp(4))
-            background = ui.shape(AppUi.SURFACE_LOWEST, 999, AppUi.BORDER)
-        }
-        val cells = mutableListOf<TextView>()
-        fun paint(sel: Int) = cells.forEachIndexed { i, c ->
-            c.background = ui.shape(if (i == sel) AppUi.PRIMARY_CONTAINER else 0, 999)
-            c.setTextColor(if (i == sel) AppUi.ON_PRIMARY_CONTAINER else AppUi.MUTED)
-        }
-        options.forEachIndexed { i, label ->
-            val cell = ui.mono(label, 11, AppUi.MUTED, true).apply {
-                gravity = Gravity.CENTER
-                isFocusable = true
-                contentDescription = "$title: $label"
-                setOnClickListener { pick(i); paint(i) }
-            }
-            cells += cell
-            track.addView(cell, LinearLayout.LayoutParams(0, ui.dp(36), 1f))
-        }
-        paint(selected)
-        box.addView(track)
+        box.addView(ui.options(options, selected) { pick(it) })
         parent.addView(box)
     }
 
@@ -814,9 +777,7 @@ class MainActivity : Activity() {
     /** Un .zip con imágenes es una carcasa; uno con otros .zip dentro es un paquete y se eligen cuáles. */
     @Suppress("DEPRECATION")
     private fun importSkin(uri: Uri) {
-        val progress = android.app.ProgressDialog(this).apply {
-            setMessage("Leyendo el archivo…"); setCancelable(false); show()
-        }
+        val progress = dialog().setTitle("Importar carcasa").setMessage("Leyendo el archivo…").setCancelable(false).show()
         fun done(result: () -> Unit) = runOnUiThread {
             if (isDestroyed) return@runOnUiThread
             progress.dismiss(); result()
@@ -844,9 +805,7 @@ class MainActivity : Activity() {
             .setPositiveButton("Importar") { _, _ ->
                 val chosen = entries.filterIndexed { i, _ -> picked[i] }
                 if (chosen.isEmpty()) return@setPositiveButton
-                val progress = android.app.ProgressDialog(this).apply {
-                    setMessage("Importando ${chosen.size} carcasa(s)…"); setCancelable(false); show()
-                }
+                val progress = dialog().setTitle("Importar carcasas").setMessage("Importando ${chosen.size} carcasa(s)…").setCancelable(false).show()
                 Thread {
                     val result = runCatching { SkinPack.importFromPack(this, uri, chosen) }
                     runOnUiThread {

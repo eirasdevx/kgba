@@ -1,7 +1,6 @@
 package com.kgba.app
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Rect
@@ -68,10 +67,10 @@ class ConsoleEditorActivity : Activity() {
         row("Carcasa", "Botones", { chooseColor(true) }, { chooseColor(false) })
         row("Seleccionar", "Restablecer", {
             val names = pad.controlNames()
-            AlertDialog.Builder(this).setTitle("Selecciona un control")
+            AppDialog.Builder(this).setTitle("Selecciona un control")
                 .setItems(names) { _, index -> pad.selectControl(names[index]) }.show()
         }, {
-            AlertDialog.Builder(this).setTitle("Restablecer esta orientación")
+            AppDialog.Builder(this).setTitle("Restablecer esta orientación")
                 .setMessage("Se restablecerán las posiciones y tamaños. Los colores y la otra orientación se conservarán.")
                 .setNegativeButton(R.string.cancel, null)
                 .setPositiveButton("Restablecer") { _, _ ->
@@ -137,17 +136,17 @@ class ConsoleEditorActivity : Activity() {
             if (shell) pad.consoleStyle.shell = color else pad.consoleStyle.buttons = color
             pad.refreshStyle()
         }
-        AlertDialog.Builder(this).setTitle(if (shell) "Color de la carcasa" else "Color de los botones")
+        AppDialog.Builder(this).setTitle(if (shell) "Color de la carcasa" else "Color de los botones")
             .setItems(names) { _, index ->
                 if (index < colors.size) apply(colors[index]) else {
                     val input = EditText(this).apply {
                         setSingleLine(); hint = "#RRGGBB"
                         setText(String.format("#%06X", (if (shell) pad.consoleStyle.shell else pad.consoleStyle.buttons) and 0xFFFFFF))
                     }
-                    val dialog = AlertDialog.Builder(this).setTitle("Color hexadecimal")
+                    val dialog = AppDialog.Builder(this).setTitle("Color hexadecimal")
                         .setView(input).setNegativeButton(R.string.cancel, null).setPositiveButton("Aplicar", null).create()
                     dialog.setOnShowListener {
-                        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                        dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
                             val value = input.text.toString().trim()
                             if (!Regex("#[0-9a-fA-F]{6}").matches(value)) input.error = "Usa un color como #2378D9"
                             else { apply(Color.parseColor(value)); dialog.dismiss() }
@@ -160,7 +159,7 @@ class ConsoleEditorActivity : Activity() {
 
     private fun discard() {
         if (pad.consoleStyle.encode() == original) { finish(); return }
-        AlertDialog.Builder(this).setTitle("¿Descartar los cambios?")
+        AppDialog.Builder(this).setTitle("¿Descartar los cambios?")
             .setNegativeButton("Seguir editando", null).setPositiveButton("Descartar") { _, _ -> finish() }.show()
     }
 

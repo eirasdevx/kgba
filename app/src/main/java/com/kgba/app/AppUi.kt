@@ -172,6 +172,57 @@ internal class AppUi(private val context: Context) {
         setPadding(0, dp(20), 0, dp(8))
     }
 
+    /** Wrap choices according to their measured text and the user's font scale. */
+    fun options(labels: List<String>, selected: Int, pick: (Int) -> Unit): View {
+        val cells = mutableListOf<TextView>()
+        fun paint(index: Int) = cells.forEachIndexed { i, cell ->
+            cell.isSelected = i == index
+            cell.background = ripple(shape(if (i == index) PRIMARY_CONTAINER else SURFACE_LOWEST,
+                14, if (i == index) PRIMARY else BORDER))
+            cell.setTextColor(if (i == index) ON_PRIMARY_CONTAINER else MUTED)
+            cell.contentDescription = labels[i] + if (i == index) ", seleccionado" else ""
+        }
+        val group = object : android.view.ViewGroup(context) {
+            private val bounds = mutableListOf<android.graphics.Rect>()
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                val width = MeasureSpec.getSize(widthMeasureSpec)
+                val gap = dp(8)
+                val desired = cells.maxOfOrNull { it.paint.measureText(it.text.toString()).toInt() + dp(32) } ?: 1
+                val columns = ((width + gap) / (desired + gap)).coerceIn(1, labels.size)
+                val cellWidth = ((width - gap * (columns - 1)) / columns).coerceAtLeast(1)
+                bounds.clear()
+                var y = 0
+                cells.chunked(columns).forEach { row ->
+                    row.forEach { it.measure(MeasureSpec.makeMeasureSpec(cellWidth, MeasureSpec.EXACTLY),
+                        MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)) }
+                    val height = row.maxOf { it.measuredHeight }
+                    row.forEachIndexed { x, cell ->
+                        cell.measure(MeasureSpec.makeMeasureSpec(cellWidth, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
+                        bounds += android.graphics.Rect(x * (cellWidth + gap), y, x * (cellWidth + gap) + cellWidth, y + height)
+                    }
+                    y += height + gap
+                }
+                setMeasuredDimension(width, (y - gap).coerceAtLeast(0))
+            }
+            override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+                cells.forEachIndexed { i, cell -> bounds[i].let { cell.layout(it.left, it.top, it.right, it.bottom) } }
+            }
+        }
+        labels.forEachIndexed { i, label ->
+            val cell = text(label, 13, true).apply {
+                gravity = Gravity.CENTER
+                minimumHeight = dp(48)
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                isFocusable = true
+                setOnClickListener { paint(i); pick(i) }
+            }
+            cells += cell
+            group.addView(cell)
+        }
+        paint(selected)
+        return group
+    }
+
     fun button(label: String, primary: Boolean = false, action: () -> Unit) = Button(context).apply {
         text = label
         textSize = 15f
