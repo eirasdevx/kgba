@@ -15,7 +15,7 @@ core/      Núcleo del emulador (módulo Kotlin/JVM, sin dependencias)
   Backup.kt  Guardado del cartucho: SRAM, Flash 64K/128K y EEPROM 512B/8K (autodetección)
   Sio.kt     Puerto serie y cable link entre dos consolas
   Gpio.kt    Hardware del cartucho: reloj RTC, sensor solar, giroscopio, vibración e inclinación
-  Hle.kt     BIOS de alto nivel: las SWI de la BIOS en Kotlin (no necesitas la BIOS de Nintendo)
+  Hle.kt     BIOS de alto nivel: las SWI de la BIOS en Kotlin (no necesitas ningún archivo de BIOS)
   Gba.kt     La consola: planificador por líneas, E/S, interrupciones y estados guardados
 app/       App Android (minSdk 24)
 desktop/   Reproductor de escritorio (Swing) y ejecutor sin ventana para pruebas
@@ -67,7 +67,7 @@ Usa solo ROMs que hayas extraído de tus propios cartuchos, o juegos homebrew.
 
 ## Estado de las pruebas
 
-Con la BIOS en Kotlin pasan todos los tests de [jsmolka/gba-tests](https://github.com/jsmolka/gba-tests): `arm`, `thumb`, `memory`, `bios`, `nes`, `unsafe`, `save/sram`, `save/flash64`, `save/flash128` y `save/none`. Los de `ppu` se ven bien. Con una BIOS real (la libre de Cult-of-GBA) arranca el logo y pasan `arm`, `thumb` y `memory`. El test `bios` espera valores propios de la BIOS de Nintendo, así que con la de Cult-of-GBA no aplica.
+Con la BIOS en Kotlin pasan todos los tests de [jsmolka/gba-tests](https://github.com/jsmolka/gba-tests): `arm`, `thumb`, `memory`, `bios`, `nes`, `unsafe`, `save/sram`, `save/flash64`, `save/flash128` y `save/none`. Los de `ppu` se ven bien. Con una BIOS real (la libre de Cult-of-GBA) arranca el logo y pasan `arm`, `thumb` y `memory`. El test `bios` espera valores propios de la BIOS original, así que con la de Cult-of-GBA no aplica.
 
 También se ha probado entero el juego homebrew **µCity Advance**: menús, mapa con scroll, sprites, ventanas, música por Direct Sound y estados guardados deterministas.
 

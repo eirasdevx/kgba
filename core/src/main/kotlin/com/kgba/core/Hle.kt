@@ -12,7 +12,7 @@ import kotlin.math.sqrt
 
 /**
  * BIOS de alto nivel: implementa en Kotlin las llamadas SWI de la BIOS de la GBA,
- * para poder jugar sin el archivo de BIOS original de Nintendo.
+ * para poder jugar sin el archivo de BIOS original.
  */
 class Hle(private val gba: Gba) {
     private val cpu get() = gba.cpu
