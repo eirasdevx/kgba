@@ -120,6 +120,12 @@ class GamepadView(context: Context) : View(context) {
     private val toolPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF22222A.toInt() }
     private val toolOn = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF3A3A46.toInt() }
     private val path = Path()
+    private val capRect = RectF()
+    private val capFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xEB141417.toInt() }
+    private val capEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = 0x24FFFFFF; strokeWidth = 2f }
+    private val capShadow = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x40000000 }
+    private val capMenu = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val capPress = Paint(Paint.ANTI_ALIAS_FLAG)
 
     // ---- carcasa
     private val bodyPath = Path()      // cuerpo principal (con el hueco de la pantalla)
@@ -127,6 +133,19 @@ class GamepadView(context: Context) : View(context) {
     private val skinBody = Paint(Paint.ANTI_ALIAS_FLAG)
     private val bezelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF26232F.toInt() }
 
+
+    /**
+     * Accesos en fila compacta (una cápsula): botones redondos de diámetro [size] centrados en
+     * (cx, cy), con el menú hacia el centro.
+     */
+    private fun toolRow(cx: Float, cy: Float, size: Float, actions: IntArray) {
+        val step = size * 1.22f
+        val left = cx - (step * (actions.size - 1) + size) / 2
+        actions.forEachIndexed { i, a ->
+            val x = left + size / 2 + i * step
+            tools += Tool(a, RectF(x - size / 2, cy - size / 2, x + size / 2, cy + size / 2))
+        }
+    }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         setPressed(0); onRewind(false); rewindHeld = false; toolDown = -1
@@ -186,9 +205,7 @@ class GamepadView(context: Context) : View(context) {
             val area = hf - panelTop
             val toolbarH = minOf(48 * resources.displayMetrics.density, area * 0.15f)
             val cell = (wf - gap * 4) / 6
-            intArrayOf(ACT_MENU, ACT_REWIND, ACT_SAVE, ACT_SLOT, ACT_LOAD, ACT_FF).forEachIndexed { i, action ->
-                tools += Tool(action, RectF(gap * 2 + i * cell, hf - toolbarH - gap * 1.5f, gap * 2 + (i + 1) * cell - gap / 3, hf - gap * 1.5f))
-            }
+            toolRow(wf / 2, hf - toolbarH / 2 - gap * 1.5f, minOf(toolbarH, cell * 0.8f), intArrayOf(ACT_SLOT, ACT_REWIND, ACT_SAVE, ACT_MENU, ACT_LOAD, ACT_FF))
             val controlTop = panelTop + gap * 1.5f
             val controlH = hf - controlTop - toolbarH - gap * 3
             val shoulderH = minOf(48 * resources.displayMetrics.density, controlH * 0.17f)
@@ -217,12 +234,9 @@ class GamepadView(context: Context) : View(context) {
             buttons += Btn(Button.R, "R", RectF(wf - side + gap, gap, wf - gap, gap + shoulderH), false)
             val cell = (side - gap * 2) / 3
             val toolH = minOf(cell, hf * 0.14f)
-            intArrayOf(ACT_MENU, ACT_SAVE, ACT_LOAD).forEachIndexed { i, action ->
-                tools += Tool(action, RectF(gap + i * cell, hf * 0.22f, gap + (i + 1) * cell - gap / 4, hf * 0.22f + toolH))
-            }
-            intArrayOf(ACT_SLOT, ACT_REWIND, ACT_FF).forEachIndexed { i, action ->
-                tools += Tool(action, RectF(wf - side + gap + i * cell, hf * 0.22f, wf - side + gap + (i + 1) * cell - gap / 4, hf * 0.22f + toolH))
-            }
+            val toolD = minOf(toolH, (side - gap * 2) / 3.8f)
+            toolRow(lx, hf * 0.22f + toolH / 2, toolD, intArrayOf(ACT_SAVE, ACT_MENU, ACT_LOAD))
+            toolRow(rx, hf * 0.22f + toolH / 2, toolD, intArrayOf(ACT_SLOT, ACT_REWIND, ACT_FF))
             padX = lx; padY = hf * 0.60f; padR = minOf(side * 0.34f, hf * 0.19f)
             val r = minOf(side * 0.19f, hf * 0.105f)
             circle(Button.A, "A", rx + side * 0.23f, hf * 0.51f, r)
@@ -271,10 +285,7 @@ class GamepadView(context: Context) : View(context) {
         val toolCy = (shellTop + bt) / 2
         val cell = (br - bl) / 6
         val toolW = minOf(cell * 0.82f, toolH * 1.5f)
-        intArrayOf(ACT_MENU, ACT_REWIND, ACT_SAVE, ACT_SLOT, ACT_LOAD, ACT_FF).forEachIndexed { i, action ->
-            val cx = bl + cell * (i + 0.5f)
-            tools += Tool(action, RectF(cx - toolW / 2, toolCy - toolH / 2, cx + toolW / 2, toolCy + toolH / 2))
-        }
+        toolRow((bl + br) / 2, toolCy, minOf(toolH, toolW), intArrayOf(ACT_SLOT, ACT_REWIND, ACT_SAVE, ACT_MENU, ACT_LOAD, ACT_FF))
     }
 
     private var kUnit = 0f
@@ -322,7 +333,7 @@ class GamepadView(context: Context) : View(context) {
     private fun drawSkin(canvas: Canvas) {
         val p = pack
         if (usingPack && p != null) drawPackShell(canvas, p) else drawClassicShell(canvas)
-        for (t in tools) drawTool(canvas, t)
+        drawToolbar(canvas)
         if (!showButtons && !editing) return
         drawDpad(canvas)
         for (b in buttons) drawButton(canvas, b)
@@ -507,9 +518,7 @@ class GamepadView(context: Context) : View(context) {
         // barra de accesos rápidos al pie de la base
         val toolbarH = minOf(48 * resources.displayMetrics.density, (hf - panelTop) * 0.12f)
         val cell = (wf - gap * 4) / 6
-        intArrayOf(ACT_MENU, ACT_REWIND, ACT_SAVE, ACT_SLOT, ACT_LOAD, ACT_FF).forEachIndexed { i, action ->
-            tools += Tool(action, RectF(gap * 2 + i * cell, hf - toolbarH - gap * 1.5f, gap * 2 + (i + 1) * cell - gap / 3, hf - gap * 1.5f))
-        }
+        toolRow(wf / 2, hf - toolbarH / 2 - gap * 1.5f, minOf(toolbarH, cell * 0.8f), intArrayOf(ACT_SLOT, ACT_REWIND, ACT_SAVE, ACT_MENU, ACT_LOAD, ACT_FF))
         val top = panelTop + gap * 0.6f
         val ch = hf - toolbarH - gap * 2.5f - top
         val k = minOf(wf, ch * 1.05f)
@@ -682,7 +691,7 @@ class GamepadView(context: Context) : View(context) {
     }
 
     private fun drawAll(canvas: Canvas) {
-        for (t in tools) drawTool(canvas, t)
+        drawToolbar(canvas)
         if (!showButtons) return
         drawDpad(canvas)
         for (b in buttons) drawButton(canvas, b)
@@ -784,17 +793,60 @@ class GamepadView(context: Context) : View(context) {
         }
     }
 
+    /**
+     * Barra de accesos en cápsula: los accesos que están en fila (aunque se hayan movido en el
+     * editor) comparten una píldora oscura; cada uno es un botón redondo y el menú, un círculo
+     * blanco con el icono oscuro.
+     */
+    private fun drawToolbar(canvas: Canvas) {
+        val sorted = tools.sortedBy { it.rect.centerX() }
+        val used = BooleanArray(sorted.size)
+        for (i in sorted.indices) {
+            if (used[i]) continue
+            used[i] = true
+            val first = sorted[i]
+            val d = minOf(first.rect.width(), first.rect.height())
+            var right = first; var top = first.rect.centerY() - d / 2; var bottom = first.rect.centerY() + d / 2
+            for (j in i + 1 until sorted.size) {
+                if (used[j]) continue
+                val t = sorted[j]
+                val dj = minOf(t.rect.width(), t.rect.height())
+                val sameRow = abs(t.rect.centerY() - first.rect.centerY()) < d * 0.5f
+                val near = t.rect.centerX() - right.rect.centerX() < (d + dj) * 1.05f
+                if (sameRow && near) {
+                    used[j] = true; right = t
+                    top = minOf(top, t.rect.centerY() - dj / 2); bottom = maxOf(bottom, t.rect.centerY() + dj / 2)
+                }
+            }
+            val pad = d * 0.16f
+            val rd = minOf(right.rect.width(), right.rect.height())
+            capRect.set(first.rect.centerX() - d / 2 - pad, top - pad, right.rect.centerX() + rd / 2 + pad, bottom + pad)
+            val rr = capRect.height() / 2
+            canvas.save(); canvas.translate(0f, capRect.height() * 0.06f)
+            canvas.drawRoundRect(capRect, rr, rr, capShadow); canvas.restore()
+            canvas.drawRoundRect(capRect, rr, rr, capFill)
+            canvas.drawRoundRect(capRect, rr, rr, capEdge)
+        }
+        for (t in tools) drawTool(canvas, t)
+    }
+
     private fun drawTool(canvas: Canvas, t: Tool) {
         val r = t.rect
         val active = (t.action == ACT_FF && fastForward) || (t.action == ACT_REWIND && rewindHeld)
         val down = toolDown == t.action
-        val rr = r.height() * 0.28f
-        canvas.drawRoundRect(r, rr, rr, if (down) toolOn else toolPaint)
-        val col = if (active) ACCENT else toolIcon
-        iconPaint.color = col; iconFill.color = col
-        val s = r.height() * 0.5f
         val cx = r.centerX()
         val cy = r.centerY()
+        val rad = minOf(r.width(), r.height()) / 2
+        val col = if (t.action == ACT_MENU) {
+            capMenu.color = if (down) 0xFFCFCFD6.toInt() else 0xFFF4F4F7.toInt()
+            canvas.drawCircle(cx, cy, rad, capMenu)
+            0xFF17171A.toInt()
+        } else {
+            if (down || active) { capPress.color = if (active) 0x40D2BBFF else 0x30FFFFFF; canvas.drawCircle(cx, cy, rad, capPress) }
+            if (active) ACCENT else 0xFFF2F2F5.toInt()
+        }
+        iconPaint.color = col; iconFill.color = col
+        val s = rad * 0.95f
         iconPaint.strokeWidth = s * 0.13f
         when (t.action) {
             ACT_MENU -> for (k in -1..1) {
@@ -803,32 +855,18 @@ class GamepadView(context: Context) : View(context) {
             }
             ACT_SAVE, ACT_LOAD -> {
                 // bandeja con flecha hacia dentro (guardar) o hacia fuera (cargar)
-                val wide = r.width() > r.height() * 1.6f
-                val bx = if (wide) r.left + r.height() * 0.5f else cx
                 val tw = s * 0.42f
                 path.reset()
-                path.moveTo(bx - tw, cy + s * 0.05f); path.lineTo(bx - tw, cy + s * 0.45f)
-                path.lineTo(bx + tw, cy + s * 0.45f); path.lineTo(bx + tw, cy + s * 0.05f)
+                path.moveTo(cx - tw, cy + s * 0.05f); path.lineTo(cx - tw, cy + s * 0.45f)
+                path.lineTo(cx + tw, cy + s * 0.45f); path.lineTo(cx + tw, cy + s * 0.05f)
                 canvas.drawPath(path, iconPaint)
-                canvas.drawLine(bx, cy - s * 0.5f, bx, cy + s * 0.2f, iconPaint)
+                canvas.drawLine(cx, cy - s * 0.5f, cx, cy + s * 0.2f, iconPaint)
                 if (t.action == ACT_SAVE) {
-                    canvas.drawLine(bx - s * 0.22f, cy - s * 0.02f, bx, cy + s * 0.2f, iconPaint)
-                    canvas.drawLine(bx + s * 0.22f, cy - s * 0.02f, bx, cy + s * 0.2f, iconPaint)
+                    canvas.drawLine(cx - s * 0.22f, cy - s * 0.02f, cx, cy + s * 0.2f, iconPaint)
+                    canvas.drawLine(cx + s * 0.22f, cy - s * 0.02f, cx, cy + s * 0.2f, iconPaint)
                 } else {
-                    canvas.drawLine(bx - s * 0.22f, cy - s * 0.28f, bx, cy - s * 0.5f, iconPaint)
-                    canvas.drawLine(bx + s * 0.22f, cy - s * 0.28f, bx, cy - s * 0.5f, iconPaint)
-                }
-                if (wide) {
-                    val label = if (t.action == ACT_SAVE) "GUARDAR" else "CARGAR"
-                    val tx = (bx + tw + r.right) / 2
-                    val avail = r.right - bx - tw - r.height() * 0.25f
-                    labelPaint.textSize = s * 0.42f
-                    val tw2 = labelPaint.measureText(label)
-                    if (tw2 > avail) labelPaint.textSize *= avail / tw2
-                    val old = labelPaint.color
-                    labelPaint.color = col
-                    canvas.drawText(label, tx, cy + labelPaint.textSize * 0.36f, labelPaint)
-                    labelPaint.color = old
+                    canvas.drawLine(cx - s * 0.22f, cy - s * 0.28f, cx, cy - s * 0.5f, iconPaint)
+                    canvas.drawLine(cx + s * 0.22f, cy - s * 0.28f, cx, cy - s * 0.5f, iconPaint)
                 }
             }
             ACT_SLOT -> {
