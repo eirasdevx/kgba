@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">KGBA</string>
+    <string name="open_rom">Abrir ROM (.gba / .zip)</string>
+    <string name="load_bios">BIOS (opcional)</string>
+    <string name="recent">Recientes</string>
+    <string name="no_recent">Todavía no has abierto ningún juego.</string>
+    <string name="bios_none">Sin BIOS: se usa la BIOS emulada en Kotlin.</string>
+    <string name="bios_ok">BIOS cargada: se usará la BIOS real.</string>
+    <string name="bios_bad">Ese archivo no es una BIOS de GBA (debe ocupar 16 KB).</string>
+    <string name="rom_error">No se pudo abrir la ROM: %1$s</string>
+    <string name="remove_bios">Quitar BIOS</string>
+
+    <string name="menu_title">Pausa</string>
+    <string name="resume">Continuar</string>
+    <string name="save_state">Guardar estado…</string>
+    <string name="load_state">Cargar estado…</string>
+    <string name="fast_forward">Avance rápido</string>
+    <string name="ff_speed">Velocidad del avance rápido: %1$s</string>
+    <string name="unlimited">sin límite</string>
+    <string name="rewind">Rebobinado (mantén ◀◀)</string>
+    <string name="filter">Filtro de imagen: %1$s</string>
+    <string name="lcd_colors">Colores de pantalla de GBA</string>
+    <string name="screenshot">Captura de pantalla</string>
+    <string name="toggle_sound">Sonido</string>
+    <string name="skin">Mostrar carcasa de consola</string>
+    <string name="toggle_pad">Mostrar botones táctiles</string>
+    <string name="opacity">Opacidad de los controles sin carcasa: %1$d %%</string>
+    <string name="remap">Mando físico: asignar botones…</string>
+    <string name="solar">Sensor solar: %1$s</string>
+    <string name="solar_auto">automático (sensor de luz)</string>
+    <string name="solar_level">nivel %1$d</string>
+    <string name="recalibrate">Recalibrar inclinación</string>
+    <string name="reset">Reiniciar</string>
+    <string name="exit">Salir</string>
+
+    <string name="filter_sharp">nítido</string>
+    <string name="filter_smooth">suavizado</string>
+    <string name="filter_scanlines">líneas de barrido</string>
+    <string name="filter_lcd">rejilla LCD</string>
+
+    <string name="slot_title_save">Guardar en ranura</string>
+    <string name="slot_title_load">Cargar de ranura</string>
+    <string name="slot_title_pick">Ranura para el guardado rápido</string>
+    <string name="slot_name">Ranura %1$d</string>
+    <string name="slot_empty">Vacía</string>
+    <string name="state_saved">Estado guardado en la ranura %1$d</string>
+    <string name="state_loaded">Estado de la ranura %1$d cargado</string>
+    <string name="state_missing">La ranura %1$d está vacía</string>
+    <string name="state_error">Error con el estado: %1$s</string>
+    <string name="screenshot_saved">Captura guardada en %1$s</string>
+
+    <string name="remap_title">Asignar botones del mando</string>
+    <string name="remap_press">Pulsa el botón del mando para «%1$s».\n\nAtrás: quitar asignación.</string>
+    <string name="remap_reset">Restablecer valores por defecto</string>
+    <string name="cancel">Cancelar</string>
+
+    <string name="link_menu">Multijugador (cable link): %1$s</string>
+    <string name="link_title">Multijugador</string>
+    <string name="link_off">sin conectar</string>
+    <string name="link_connected">conectado con %1$s</string>
+    <string name="link_host_wifi">Crear partida en la red local (Wi-Fi)</string>
+    <string name="link_join_wifi">Unirse a una partida de la red local</string>
+    <string name="link_host_bt">Crear partida por Bluetooth</string>
+    <string name="link_join_bt">Unirse por Bluetooth</string>
+    <string name="link_disconnect">Desconectar el cable</string>
+    <string name="link_waiting_wifi">Esperando al otro jugador…\n\nDirección de este móvil: %1$s\n\nEn el otro móvil abre el mismo juego (o uno compatible) y elige «Unirse a una partida de la red local».</string>
+    <string name="link_waiting_bt">Esperando al otro jugador por Bluetooth…\n\nEste móvil se llama «%1$s». Los dos móviles tienen que estar emparejados en los ajustes de Bluetooth.</string>
+    <string name="link_searching">Buscando partidas en la red…</string>
+    <string name="link_manual_ip">Escribir la dirección IP</string>
+    <string name="link_connecting">Conectando con %1$s…</string>
+    <string name="link_ok">Cable conectado con %1$s. Eres el jugador %2$d.</string>
+    <string name="link_other_game">Aviso: el otro móvil tiene otro juego (%1$s).</string>
+    <string name="link_lost">Se ha desconectado el cable link</string>
+    <string name="link_error">No se pudo conectar: %1$s</string>
+    <string name="link_no_network">sin red local (conéctate a una Wi-Fi o activa la zona Wi-Fi)</string>
+    <string name="link_no_bt">Este móvil no tiene Bluetooth</string>
+    <string name="link_bt_off">Enciende el Bluetooth y vuelve a intentarlo</string>
+    <string name="link_bt_denied">Sin el permiso de dispositivos cercanos no se puede usar el Bluetooth</string>
+    <string name="link_no_paired">No hay dispositivos emparejados. Empareja los dos móviles en los ajustes de Bluetooth.</string>
+    <string name="link_pick_device">Elige el otro móvil</string>
+</resources>

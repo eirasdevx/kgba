@@ -1,0 +1,13 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.kotlin/
+captures/
+*.sav
+*.state
+
+# Arte antiguo del icono (no se usa)
+icono_anterior/
+*/bin/
