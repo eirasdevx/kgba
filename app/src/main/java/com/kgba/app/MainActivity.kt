@@ -709,7 +709,9 @@ class MainActivity : Activity() {
         if (hasBios) content.addView(ui.row("Usar BIOS integrada", "Retirar la BIOS externa", "↺") {
             RomStore.biosFile(this).delete(); render(true)
         })
-
+        content.addView(ui.mono("Creado por eiras.devx", 10, AppUi.OUTLINE).apply {
+            gravity = Gravity.CENTER; setPadding(0, ui.dp(28), 0, ui.dp(8))
+        })
     }
 
 
